@@ -1,0 +1,976 @@
+{
+  "name": "Instagram Comment-to-DM Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "instagram-comments",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "5566f663-187b-4fcc-8641-1e9813faafa1",
+      "name": "Instagram Verify (GET)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "30c4d76e-db11-4f31-a0d4-e827f5bc18a8"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.query['hub.mode'] }}",
+              "rightValue": "subscribe",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "id": "4d790d23-4e7d-415b-b3fb-d81fc7402048"
+            },
+            {
+              "leftValue": "={{ $json.query['hub.verify_token'] }}",
+              "rightValue": "desmos_verify_8842",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              },
+              "id": "264af895-c9f2-438b-b4f3-86551ca449a5"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "98298738-5328-412b-8ca1-7af549c4a592",
+      "name": "Verify Token Matches?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        272,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "={{ $json.query['hub.challenge'] }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "8ae49724-fc3b-4e8c-993a-48383ddbcbd7",
+      "name": "Return Challenge",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        496,
+        128
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "Forbidden",
+        "options": {
+          "responseCode": 403
+        }
+      },
+      "id": "95c5a990-e8c5-474e-9d96-547c60de298b",
+      "name": "Reject Verification",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        496,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "instagram-comments",
+        "options": {
+          "responseData": "EVENT_RECEIVED"
+        }
+      },
+      "id": "600ddb96-343d-4d36-97a6-4ef4fabcae2d",
+      "name": "Instagram Events (POST)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        320
+      ],
+      "webhookId": "30abb41c-a4fb-4d1d-b8c4-17b562c26f53"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c1",
+              "name": "keywords",
+              "type": "array",
+              "value": "={{ [\"desmos\", \"link\", \"send\"] }}"
+            },
+            {
+              "id": "c2",
+              "name": "dm_message_template",
+              "type": "string",
+              "value": "Hey {username}! Here's your link: {link}"
+            },
+            {
+              "id": "c3",
+              "name": "link_url",
+              "type": "string",
+              "value": "https://crackd.it/"
+            },
+            {
+              "id": "c4",
+              "name": "media_url",
+              "type": "string",
+              "value": ""
+            },
+            {
+              "id": "c5",
+              "name": "media_type",
+              "type": "string",
+              "value": "image"
+            },
+            {
+              "id": "c6",
+              "name": "ig_user_id",
+              "type": "string",
+              "value": "robinisepic92"
+            },
+            {
+              "id": "c7",
+              "name": "api_version",
+              "type": "string",
+              "value": "v21.0"
+            },
+            {
+              "id": "c8",
+              "name": "public_reply_enabled",
+              "type": "boolean",
+              "value": true
+            },
+            {
+              "id": "c9",
+              "name": "public_reply_text",
+              "type": "string",
+              "value": "Sent you a DM! 📩"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a72198af-1fee-4756-b5c1-2f1204c13650",
+      "name": "Config",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        272,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Config').first().json;\nconst body = $('Instagram Events (POST)').first().json.body || {};\nconst keywords = (cfg.keywords || []).map(k => String(k).toLowerCase()).filter(Boolean);\nconst out = [];\nfor (const entry of (body.entry || [])) {\n  const rawTime = Number(entry.time || 0);\n  const timeMs = rawTime > 1e12 ? rawTime : rawTime * 1000;\n  for (const ch of (entry.changes || [])) {\n    if (ch.field !== 'comments') continue;\n    const v = ch.value || {};\n    const text = String(v.text || '');\n    const lower = text.toLowerCase();\n    const matched = keywords.find(k => lower.includes(k)) || '';\n    out.push({ json: {\n      event_type: 'comment',\n      comment_id: String(v.id || ''),\n      comment_text: text,\n      commenter_id: String((v.from || {}).id || ''),\n      commenter_username: String((v.from || {}).username || ''),\n      media_id: String((v.media || {}).id || ''),\n      parent_id: String(v.parent_id || ''),\n      matched_keyword: matched,\n      account_id: String(entry.id || ''),\n      event_time_ms: timeMs || Date.now(),\n    } });\n  }\n  for (const m of (entry.messaging || [])) {\n    const msg = m.message || {};\n    out.push({ json: {\n      event_type: 'message',\n      sender_id: String((m.sender || {}).id || ''),\n      recipient_id: String((m.recipient || {}).id || ''),\n      message_text: String(msg.text || ''),\n      is_echo: !!msg.is_echo,\n      account_id: String(entry.id || ''),\n      event_time_ms: timeMs || Date.now(),\n    } });\n  }\n}\nreturn out;"
+      },
+      "id": "6303b8c5-95de-45c6-8aa4-2eddf0f97dbd",
+      "name": "Parse Events",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "comment",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "comment"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": false,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.event_type }}",
+                    "rightValue": "message",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "message"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "49a17433-dc6b-4e4a-8b9a-7e569d18885f",
+      "name": "Route Event Type",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        720,
+        448
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.comment_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "leftValue": "={{ $json.matched_keyword }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "leftValue": "={{ $json.commenter_id }}",
+              "rightValue": "={{ $('Config').first().json.ig_user_id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.commenter_id }}",
+              "rightValue": "={{ $json.account_id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.event_time_ms > Date.now() - 7 * 24 * 60 * 60 * 1000 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "358fd2fc-a2cf-4b7a-8694-8cd973caa68a",
+      "name": "Keyword Match & Not Own",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        800,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "rowNotExists",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "0x6yzdEuztnSorQs",
+          "cachedResultName": "ig_processed_comments"
+        },
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "comment_id",
+              "keyValue": "={{ $json.comment_id }}"
+            }
+          ]
+        }
+      },
+      "id": "b1c20fc3-4421-47cf-90f1-adadd417cca9",
+      "name": "Skip Already Processed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1024,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.instagram.com/v21.0/me/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ recipient: { comment_id: $json.comment_id }, message: { text: 'Hey ' + ($json.commenter_username || 'there') + '! Here\\'s your link: ' + $('Config').first().json.link_url } }) }}",
+        "options": {}
+      },
+      "id": "a845f3c7-cf43-49f2-942c-e581a1ba1a6e",
+      "name": "Send Private Reply DM",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1328,
+        528
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "jUrxc3m5XFwioAHx",
+          "name": "Instagram Access Token (Rohaan)"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "0x6yzdEuztnSorQs",
+          "cachedResultName": "ig_processed_comments"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "comment_id": "={{ $('Skip Already Processed').item.json.comment_id }}",
+            "commenter_id": "={{ $('Skip Already Processed').item.json.commenter_id }}",
+            "commenter_username": "={{ $('Skip Already Processed').item.json.commenter_username }}",
+            "media_id": "={{ $('Skip Already Processed').item.json.media_id }}",
+            "matched_keyword": "={{ $('Skip Already Processed').item.json.matched_keyword }}",
+            "processed_at": "={{ $now.toISO() }}",
+            "media_sent": false
+          },
+          "schema": [
+            {
+              "id": "comment_id",
+              "displayName": "comment_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "commenter_id",
+              "displayName": "commenter_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "commenter_username",
+              "displayName": "commenter_username",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "media_id",
+              "displayName": "media_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "matched_keyword",
+              "displayName": "matched_keyword",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "processed_at",
+              "displayName": "processed_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "dateTime",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "media_sent",
+              "displayName": "media_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "52eaca64-cea1-4b28-9a56-8d4d5ac50f32",
+      "name": "Mark Comment Processed",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1552,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $('Config').first().json.public_reply_enabled }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a4ae7f76-22aa-4558-9eb3-ae00b6ddeb38",
+      "name": "Public Reply Enabled?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1776,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://graph.instagram.com/{{ $('Config').first().json.api_version }}/{{ $('Skip Already Processed').item.json.comment_id }}/replies",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ message: $('Config').first().json.public_reply_text }) }}",
+        "options": {}
+      },
+      "id": "e8dbcaf0-ce21-4700-b5d0-d731830303ed",
+      "name": "Reply Under Comment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        2000,
+        352
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "jUrxc3m5XFwioAHx",
+          "name": "Instagram Access Token (Rohaan)"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "errorMessage": "=Instagram DM failed for comment {{ $('Skip Already Processed').item.json.comment_id }} (@{{ $('Skip Already Processed').item.json.commenter_username }}). Error: {{ $json.error ? ($json.error.message || JSON.stringify($json.error)) : 'unknown' }}. Check the access token and the 7-day private reply window."
+      },
+      "id": "091a05d4-f64a-4547-a05d-05463d4d6172",
+      "name": "Fail Execution (DM Error)",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1776,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "leftValue": "={{ $json.is_echo }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            },
+            {
+              "leftValue": "={{ $json.sender_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "leftValue": "={{ $json.sender_id }}",
+              "rightValue": "={{ $('Config').first().json.ig_user_id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.sender_id }}",
+              "rightValue": "={{ $json.account_id }}",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            },
+            {
+              "leftValue": "={{ $('Config').first().json.media_url }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "50560bca-62fe-45f4-a605-227660fff7da",
+      "name": "Incoming User Reply",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        800,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "0x6yzdEuztnSorQs",
+          "cachedResultName": "ig_processed_comments"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "commenter_id",
+              "keyValue": "={{ $json.sender_id }}"
+            },
+            {
+              "keyName": "media_sent",
+              "condition": "isFalse"
+            }
+          ]
+        },
+        "limit": 1
+      },
+      "id": "16aa99cd-38c9-4c97-8b74-2b156f29375e",
+      "name": "Find Pending Media",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1024,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.instagram.com/v21.0/me/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpTemplatedCustomAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ recipient: { id: $('Incoming User Reply').item.json.sender_id }, message: { attachment: { type: $('Config').first().json.media_type, payload: { url: $('Config').first().json.media_url } } } }) }}",
+        "options": {}
+      },
+      "id": "e21aacb4-38ba-4084-a272-e755746609e0",
+      "name": "Send Media Attachment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        1248,
+        544
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "credentials": {
+        "httpTemplatedCustomAuth": {
+          "id": "jUrxc3m5XFwioAHx",
+          "name": "Instagram Access Token (Rohaan)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "0x6yzdEuztnSorQs",
+          "cachedResultName": "ig_processed_comments"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "commenter_id",
+              "keyValue": "={{ $('Incoming User Reply').item.json.sender_id }}"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "media_sent": true
+          },
+          "schema": [
+            {
+              "id": "media_sent",
+              "displayName": "media_sent",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "boolean",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "95da1289-733d-4bcf-a8db-3dfe071d031e",
+      "name": "Mark Media Sent",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1472,
+        544
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Instagram Verify (GET)": {
+      "main": [
+        [
+          {
+            "node": "Verify Token Matches?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Token Matches?": {
+      "main": [
+        [
+          {
+            "node": "Return Challenge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reject Verification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram Events (POST)": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Parse Events",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Events": {
+      "main": [
+        [
+          {
+            "node": "Route Event Type",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Event Type": {
+      "main": [
+        [
+          {
+            "node": "Keyword Match & Not Own",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Incoming User Reply",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Keyword Match & Not Own": {
+      "main": [
+        [
+          {
+            "node": "Skip Already Processed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip Already Processed": {
+      "main": [
+        [
+          {
+            "node": "Send Private Reply DM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Private Reply DM": {
+      "main": [
+        [
+          {
+            "node": "Mark Comment Processed",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Fail Execution (DM Error)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Comment Processed": {
+      "main": [
+        [
+          {
+            "node": "Public Reply Enabled?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Public Reply Enabled?": {
+      "main": [
+        [
+          {
+            "node": "Reply Under Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Incoming User Reply": {
+      "main": [
+        [
+          {
+            "node": "Find Pending Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find Pending Media": {
+      "main": [
+        [
+          {
+            "node": "Send Media Attachment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Media Attachment": {
+      "main": [
+        [
+          {
+            "node": "Mark Media Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "49d034c4-79c7-4768-8b88-8938c36b57dd",
+  "meta": {
+    "instanceId": "1fc25eeebf042c994369a090a0b3d2c4de98c815e2dbdd73051c2028bca55694"
+  },
+  "nodeGroups": [
+    {
+      "id": "d66c7361-10e1-4232-9afc-d60549588585",
+      "name": "Verify webhook",
+      "nodeIds": [
+        "98298738-5328-412b-8ca1-7af549c4a592",
+        "8ae49724-fc3b-4e8c-993a-48383ddbcbd7",
+        "95c5a990-e8c5-474e-9d96-547c60de298b"
+      ],
+      "description": "Answers Meta’s one-time subscription check: echoes the challenge when the verify token matches, otherwise rejects it"
+    },
+    {
+      "id": "6d9e212a-7404-433f-b5e8-b156200cec95",
+      "name": "Prepare incoming events",
+      "nodeIds": [
+        "a72198af-1fee-4756-b5c1-2f1204c13650",
+        "6303b8c5-95de-45c6-8aa4-2eddf0f97dbd",
+        "49a17433-dc6b-4e4a-8b9a-7e569d18885f"
+      ],
+      "description": "Loads your settings, flattens Instagram’s payload into comment and message events, then routes each type"
+    },
+    {
+      "id": "ebdd2024-c6a2-403c-abcd-3c892832ff67",
+      "name": "Qualify comment",
+      "nodeIds": [
+        "358fd2fc-a2cf-4b7a-8694-8cd973caa68a",
+        "b1c20fc3-4421-47cf-90f1-adadd417cca9"
+      ],
+      "description": "Keeps only comments with a keyword, not from you, under 7 days old, and never handled before"
+    },
+    {
+      "id": "317b9742-0a7d-4272-934d-4da3470c11a9",
+      "name": "Deliver link",
+      "nodeIds": [
+        "a845f3c7-cf43-49f2-942c-e581a1ba1a6e",
+        "52eaca64-cea1-4b28-9a56-8d4d5ac50f32",
+        "a4ae7f76-22aa-4558-9eb3-ae00b6ddeb38",
+        "e8dbcaf0-ce21-4700-b5d0-d731830303ed",
+        "091a05d4-f64a-4547-a05d-05463d4d6172"
+      ],
+      "description": "Sends the private-reply DM, remembers the comment, optionally replies publicly; a failed DM stops the run with an error"
+    },
+    {
+      "id": "c4f22913-ba19-455c-a379-5f20627d1b34",
+      "name": "Send follow-up media",
+      "nodeIds": [
+        "50560bca-62fe-45f4-a605-227660fff7da",
+        "16aa99cd-38c9-4c97-8b74-2b156f29375e",
+        "e21aacb4-38ba-4084-a272-e755746609e0",
+        "95da1289-733d-4bcf-a8db-3dfe071d031e"
+      ],
+      "description": "When a commenter replies to the DM, sends the configured file or media once, then marks it delivered"
+    }
+  ],
+  "id": "mmHzVYIWZz3zATdP",
+  "tags": []
+}
